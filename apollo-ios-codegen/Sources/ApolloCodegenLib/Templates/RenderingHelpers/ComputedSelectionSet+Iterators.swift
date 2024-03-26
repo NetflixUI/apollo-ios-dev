@@ -13,7 +13,7 @@ extension IR.ComputedSelectionSet {
   SelectionsIterator<OrderedDictionary<String, IR.NamedFragmentSpread>.Values>
 
   func makeFieldIterator(
-    mergingStrategy: MergedSelections.MergingStrategy = .all,
+    mergingStrategy: MergedSelections.MergingStrategy,
     filter: ((IR.Field) -> Bool)? = nil
   ) -> FieldIterator {
     SelectionsIterator(
