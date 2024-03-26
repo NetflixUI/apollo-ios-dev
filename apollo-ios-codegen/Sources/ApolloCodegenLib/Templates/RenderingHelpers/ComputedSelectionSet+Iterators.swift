@@ -18,7 +18,7 @@ extension IR.ComputedSelectionSet {
   ) -> FieldIterator {
     SelectionsIterator(
       direct: direct?.fields.values,
-      merged: merged[mergingStrategy]?.fields.values,
+      merged: merged[mergingStrategy]!.fields.values,
       filter: filter
     )
   }
@@ -35,7 +35,7 @@ extension IR.ComputedSelectionSet {
   }
 
   func makeNamedFragmentIterator(
-    mergingStrategy: MergedSelections.MergingStrategy = .all,
+    mergingStrategy: MergedSelections.MergingStrategy,
     filter: ((IR.NamedFragmentSpread) -> Bool)? = nil
   ) -> NamedFragmentIterator {
     SelectionsIterator(
