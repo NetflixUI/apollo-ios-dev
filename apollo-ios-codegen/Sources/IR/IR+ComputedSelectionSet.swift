@@ -79,20 +79,20 @@ extension ComputedSelectionSet {
     }
 
     func mergeIn(
-      _ selections: EntityTreeScopeSelections,
+      _ selectionsToMerge: EntityTreeScopeSelections,
       from source: MergedSelections.MergedSource,
       with mergeStrategy: MergedSelections.MergingStrategy
     ) {
-      guard source != .init(typeInfo: self.typeInfo, fragment: nil) else {
-        return
-      }
-
-      let fieldsToMerge = self.fieldsToMerge(from: selections.fields.values)
-      let fragmentsToMerge = self.namedFragmentsToMerge(from: selections.namedFragments.values)
+      let fieldsToMerge = self.fieldsToMerge(
+        from: selectionsToMerge.fields.values
+      )
+      let fragmentsToMerge = self.namedFragmentsToMerge(
+        from: selectionsToMerge.namedFragments.values
+      )
       guard !fieldsToMerge.isEmpty || !fragmentsToMerge.isEmpty else { return }
 
-      mergedSelectionGroups.forEach { groupMergeStrategy, selections in
-        guard groupMergeStrategy.contains(mergeStrategy) else { return }
+      for (groupMergeStrategy, selections) in mergedSelectionGroups {
+        guard groupMergeStrategy.contains(mergeStrategy) else { continue }
 
         selections.mergeIn(
           fields: fieldsToMerge,
@@ -100,8 +100,8 @@ extension ComputedSelectionSet {
           from: source
         )
       }
-    }
-    
+    }    
+
     private func fieldsToMerge<S: Sequence>(
       from fields: S
     ) -> [Field] where S.Element == Field {
@@ -154,7 +154,10 @@ extension ComputedSelectionSet {
       }
     }
 
-    func addMergedInlineFragment(with condition: ScopeCondition) {
+    func addMergedInlineFragment(
+      with condition: ScopeCondition,
+      mergeStrategy: MergedSelections.MergingStrategy
+    ) {
       guard typeInfo.isEntityRoot else { return }
 
       if let directSelections = directSelections,
@@ -168,7 +171,6 @@ extension ComputedSelectionSet {
 
       for (groupMergeStrategy, selections) in mergedSelectionGroups {
         guard groupMergeStrategy.contains(mergeStrategy) else { continue }
-//        guard !$0.inlineFragments.keys.contains(condition) else { return }
 
         selections.inlineFragments[condition] = shallowInlineFragment
       }

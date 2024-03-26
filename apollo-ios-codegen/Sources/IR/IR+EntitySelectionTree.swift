@@ -117,6 +117,7 @@ class EntitySelectionTree {
     let rootTypePath = selections.typeInfo.scopePath.head
     rootNode.mergeSelections(
       matchingScopePath: rootTypePath,
+      entityTypeScopePath: rootTypePath.value.scopePath.head,
       into: selections,
       currentMergeStrategyScope: .ancestors,
       transformingSelections: nil
@@ -205,17 +206,26 @@ class EntitySelectionTree {
       self.child = .selections(entitySelections)
     }
 
+
     func mergeSelections(
-      matchingScopePath scopePathNode: LinkedList<ScopeDescriptor>.Node,
+      matchingScopePath entityPathNode: LinkedList<ScopeDescriptor>.Node,
+      entityTypeScopePath: LinkedList<ScopeCondition>.Node,
       into targetSelections: ComputedSelectionSet.Builder,
       currentMergeStrategyScope: MergedSelections.MergingStrategy,
       transformingSelections: ((Selections) -> Selections)?
     ) {
       switch child {
       case let .entity(entityNode):
-        guard let nextScopePathNode = scopePathNode.next else { return }
+        guard let nextScopePathNode = entityPathNode.next else { return }
+
+        let mergeStrategy = calculateMergeStrategyForNextEntityNode(
+          currentMergeStrategy: currentMergeStrategyScope,
+          currentEntityTypeScopePath: entityTypeScopePath
+        )
+
         entityNode.mergeSelections(
           matchingScopePath: nextScopePathNode,
+          entityTypeScopePath: nextScopePathNode.value.scopePath.head,
           into: targetSelections,
           currentMergeStrategyScope: mergeStrategy,
           transformingSelections: transformingSelections
@@ -238,25 +248,48 @@ class EntitySelectionTree {
         for (condition, node) in scopeConditions {
           guard !node.scope.isDeferred else { continue }
 
-          if scopePathNode.value.matches(condition) {
+          if let entityTypePathNextNode = entityTypeScopePath.next,
+             entityTypePathNextNode.value == condition {
             node.mergeSelections(
-              matchingScopePath: scopePathNode,
+              matchingScopePath: entityPathNode,
+              entityTypeScopePath: entityTypePathNextNode,
+              into: targetSelections,
+              currentMergeStrategyScope: .ancestors,
+              transformingSelections: transformingSelections
+            )
+
+          } else if entityPathNode.value.matches(condition) {
+            node.mergeSelections(
+              matchingScopePath: entityPathNode,
+              entityTypeScopePath: entityTypeScopePath,
               into: targetSelections,
               currentMergeStrategyScope: .siblings,
               transformingSelections: transformingSelections
             )
+
           } else if case .selections = child {
-            targetSelections.addMergedInlineFragment(with: condition)
+            targetSelections.addMergedInlineFragment(
+              with: condition,
+              mergeStrategy: currentMergeStrategyScope
+            )
           }
         }
       }
 
       // Add selections from merged fragments
       for (fragmentSpread, mergedFragmentTree) in mergedFragmentTrees {
+        // If typeInfo is equal, we are merging the fragment's selections into the selection set
+        // that directly selected the fragment. The merge strategy should be just .namedFragments
+        let mergeStrategy: MergedSelections.MergingStrategy =
+        fragmentSpread.typeInfo == targetSelections.typeInfo
+        ? .namedFragments
+        : [currentMergeStrategyScope, .namedFragments]
+
         mergedFragmentTree.rootNode.mergeSelections(
-          matchingScopePath: scopePathNode,
+          matchingScopePath: entityPathNode,
+          entityTypeScopePath: entityTypeScopePath,
           into: targetSelections,
-          currentMergeStrategyScope: .namedFragments,
+          currentMergeStrategyScope: mergeStrategy,
           transformingSelections: {
             Self.addFragment(
               fragmentSpread,
@@ -265,6 +298,27 @@ class EntitySelectionTree {
           }
         )
       }
+    }
+
+    private func calculateMergeStrategyForNextEntityNode(
+      currentMergeStrategy: MergedSelections.MergingStrategy,
+      currentEntityTypeScopePath: LinkedList<ScopeCondition>.Node
+    ) -> MergedSelections.MergingStrategy {
+      if currentMergeStrategy.contains(.siblings) {
+        return currentMergeStrategy
+      }
+
+      // If the current entity type scope is at the end of it's path, we are traversing a direct
+      // ancestor of the target selection set. Otherwise, we are traversing siblings.
+      var newMergeStrategy: MergedSelections.MergingStrategy =
+      currentEntityTypeScopePath.next == nil ? .ancestors : .siblings
+
+      // If we are currently traversing through a named fragment, we need to keep that as part of
+      // the merge strategy
+      if currentMergeStrategy.contains(.namedFragments) {
+        newMergeStrategy.insert(.namedFragments)
+      }
+      return newMergeStrategy
     }
 
     private static func addFragment(
