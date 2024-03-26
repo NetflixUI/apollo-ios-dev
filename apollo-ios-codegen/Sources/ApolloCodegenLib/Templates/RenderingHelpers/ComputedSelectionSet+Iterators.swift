@@ -24,7 +24,7 @@ extension IR.ComputedSelectionSet {
   }
 
   func makeInlineFragmentIterator(
-    mergingStrategy: MergedSelections.MergingStrategy = .all,
+    mergingStrategy: MergedSelections.MergingStrategy,
     filter: ((IR.InlineFragmentSpread) -> Bool)? = nil
   ) -> InlineFragmentIterator {
     SelectionsIterator(
